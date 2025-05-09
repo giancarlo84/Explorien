@@ -9,18 +9,34 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyD4ezSb6i0zQlA_BqacxStAxe_IIk27pis"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.explorien.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD5ZD72Fk1R5oL0lqdBvIa8ovypnkM7shI"
+        }
       }
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAiCMsVA7aDtnYZwMQWyUOTTBxi4LuxBMI"
+      }
     },
     "plugins": [
       "expo-router",
@@ -32,7 +48,10 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      ["expo-location", {
+        "locationAlwaysAndWhenInUsePermission": "Allow Explorien to access your location."
+      }]
     ],
     "experiments": {
       "typedRoutes": true

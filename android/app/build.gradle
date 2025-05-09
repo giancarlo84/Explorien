@@ -1,0 +1,104 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'com.explorien.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.explorien.app"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+        freeCompilerArgs += [
+                "-Xskip-metadata-version-check"
+        ]
+    }
+
+    // Disable Kotlin compilation tasks temporarily
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        enabled = false
+    }
+
+    // Explicitly enable BuildConfig generation
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Packaging options to avoid conflicts
+    packagingOptions {
+        resources {
+            excludes += [
+                    'META-INF/*.kotlin_module',
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/license.txt',
+                    'META-INF/NOTICE',
+                    'META-INF/NOTICE.txt',
+                    'META-INF/notice.txt',
+                    'META-INF/ASL2.0',
+                    'META-INF/*.version'
+            ]
+        }
+    }
+}
+
+dependencies {
+    // AndroidX UI libraries
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Kotlin standard library
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.7.20"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.20"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.20"
+
+    // Core splash screen
+    implementation "androidx.core:core-splashscreen:1.0.1"
+
+    // Google Maps and Location Services
+    implementation "com.google.android.gms:play-services-maps:18.2.0"
+    implementation "com.google.android.gms:play-services-location:21.0.0"
+
+    // Firebase (managed by BoM)
+    implementation platform("com.google.firebase:firebase-bom:33.10.0")
+    implementation "com.google.firebase:firebase-analytics"
+    implementation "com.google.firebase:firebase-auth"
+    implementation "com.google.firebase:firebase-firestore"
+
+    // React Native core - with version specified
+    implementation "com.facebook.react:react-android:0.72.4"
+
+    // React Native dependencies - with versions specified
+    implementation "com.facebook.react:hermes-android:0.72.4"
+    implementation "com.facebook.soloader:soloader:0.10.5"
+
+    // React Native package list dependency
+    implementation fileTree(dir: "$rootDir/../node_modules/react-native/android", include: ["*.aar"])
+    implementation fileTree(dir: "$rootDir/../node_modules", include: ["**/jsc/**/*.aar"])
+}

@@ -1,0 +1,93 @@
+// Root build.gradle
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.2.0"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.20"
+        classpath "com.google.gms:google-services:4.4.2"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+
+        // React Native repositories
+        maven {
+            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+            url "$rootDir/../node_modules/react-native/android"
+        }
+        maven {
+            // Android JSC is installed from npm
+            url "$rootDir/../node_modules/jsc-android/dist"
+        }
+    }
+
+    // Set consistent Java versions for all projects
+    afterEvaluate { project ->
+        if (project.hasProperty('android') && project.android.hasProperty('compileOptions')) {
+            project.android.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+        if (project.hasProperty('android') && project.android.hasProperty('kotlinOptions')) {
+            project.android.kotlinOptions {
+                jvmTarget = '1.8'
+                freeCompilerArgs += ["-Xskip-metadata-version-check"]
+            }
+        }
+
+        // Force consistent Kotlin version for all modules
+        if (project.hasProperty('configurations')) {
+            project.configurations.all { config ->
+                resolutionStrategy {
+                    force "org.jetbrains.kotlin:kotlin-stdlib:1.7.20"
+                    force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.20"
+                    force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.20"
+                    force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.20"
+                    force "org.jetbrains.kotlin:kotlin-reflect:1.7.20"
+                }
+            }
+        }
+    }
+}
+
+ext {
+    kotlinVersion = '1.7.20'
+    compileSdkVersion = 34
+    targetSdkVersion = 34
+    minSdkVersion = 24
+    buildToolsVersion = "34.0.0"
+    ndkVersion = "23.2.8568313"
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

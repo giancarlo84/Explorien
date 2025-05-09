@@ -1,0 +1,26 @@
+// This file configures Kotlin compiler flags to avoid version conflicts
+
+subprojects { subproject ->
+    afterEvaluate {
+        if (subproject.hasProperty('android')) {
+            if (subproject.android.hasProperty('kotlinOptions')) {
+                subproject.android.kotlinOptions {
+                    jvmTarget = "17"
+                    freeCompilerArgs += [
+                            "-Xskip-metadata-version-check",
+                            "-Xsuppressed-errors=DEFAULT_ARGUMENTS_PARSING,DEFAULT_ARGUMENTS_EXECUTION",
+                            // These features are causing problems in expo-modules-core
+                            "-language-version", "1.7",
+                            "-api-version", "1.7"
+                    ]
+                }
+            }
+
+            // Set Java compatibility
+            subproject.android.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+    }
+}

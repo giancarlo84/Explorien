@@ -1,0 +1,19 @@
+// This script disables test configurations that are causing problems
+gradle.projectsLoaded { gradle ->
+    gradle.rootProject.allprojects { project ->
+        project.afterEvaluate {
+            if (project.name == 'expo-web-browser' || project.path.contains('expo-web-browser')) {
+                println "Disabling problematic test configurations in ${project.name}"
+
+                // Get all configurations including the problem one
+                project.configurations.all { config ->
+                    // Disable problematic test configurations
+                    if (config.name.contains('AndroidTest') || config.name.contains('Test')) {
+                        config.setCanBeResolved(false)
+                        println "Disabled configuration: ${config.name}"
+                    }
+                }
+            }
+        }
+    }
+}

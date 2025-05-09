@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "226048235504",
+    "firebase_url": "https://explorien-d33f6-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "explorien-d33f6",
+    "storage_bucket": "explorien-d33f6.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:226048235504:android:b90bdc36315b47aeec2f35",
+        "android_client_info": {
+          "package_name": "com.explorien.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "226048235504-ajkc81kjtn78mr9ag6ahkg6l29o5tjuu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.explorien.app",
+            "certificate_hash": "790b5b18fa4c6a141e56e5be6baaa9eecbf73ffb"
+          }
+        },
+        {
+          "client_id": "226048235504-gdtjgg5m1l9llnpph16nrplgaujs43ht.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkqrjRse3ta8narIL6SO9wnptIIOWkReg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "226048235504-gdtjgg5m1l9llnpph16nrplgaujs43ht.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "226048235504-72abbqj04fsi289tjf2cgv374d96i6fs.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mycompany.explorien"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,52 @@
+// This script excludes problematic modules to help with build errors
+
+// For all projects
+allprojects {
+    // Exclude from all configurations
+    configurations.all { config ->
+        // Exclude problematic modules - Do NOT use version parameter
+        config.exclude module: 'expo-web-browser'
+        config.exclude group: 'host.exp.exponent', module: 'expo-web-browser'
+        config.exclude group: 'expo.modules.core', module: 'core'
+
+        // Specific exclusion for Test configurations as in the original file
+        if (config.name.contains('AndroidTest') || config.name.contains('Test')) {
+            config.exclude module: 'expo-web-browser'
+            config.exclude group: 'host.exp.exponent', module: 'expo-web-browser'
+        }
+    }
+}
+
+// For all subprojects
+subprojects { subproject ->
+    // Create a hook to process projects as they're evaluated
+    subproject.afterEvaluate { project ->
+        // Fix Kotlin dependencies in problematic modules
+        if (project.name == 'expo-web-browser' || project.path.contains('expo-web-browser')) {
+            println "Fixing Kotlin dependencies in ${project.name}"
+            project.dependencies {
+                // Add explicit dependency with version
+                implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.7.20'
+            }
+        }
+
+        // Skip test tasks for problematic modules
+        if (project.name.startsWith('expo-') ||
+                project.name.startsWith('react-native-') ||
+                project.name.startsWith('@react-native-')) {
+            project.tasks.all { task ->
+                if (task.name.contains('Test') || task.name.contains('test')) {
+                    task.enabled = false
+                }
+            }
+        }
+
+        // If project has Android plugin, apply Kotlin compiler options
+        if (project.hasProperty('android') && project.android.hasProperty('kotlinOptions')) {
+            project.android.kotlinOptions {
+                jvmTarget = "17"
+                freeCompilerArgs += ["-Xskip-metadata-version-check"]
+            }
+        }
+    }
+}

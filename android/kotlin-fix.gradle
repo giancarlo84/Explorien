@@ -1,0 +1,11 @@
+
+allprojects {
+    configurations.all { configuration ->
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == "org.jetbrains.kotlin" && 
+                (details.requested.version == null || details.requested.version == "")) {
+                details.useVersion "1.7.20"
+            }
+        }
+    }
+}

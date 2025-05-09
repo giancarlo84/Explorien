@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Define the missing attribute used in your splash screen style -->
+    <attr name="postSplashScreenTheme" format="reference" />
+</resources>

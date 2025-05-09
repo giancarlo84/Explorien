@@ -1,0 +1,34 @@
+// This script specifically targets the expo-web-browser module
+def fixModule = { project ->
+    if (project.name == 'expo-web-browser') {
+        println "Applying fix to expo-web-browser module"
+
+        project.afterEvaluate {
+            // Make sure the Android plugin has been applied before accessing implementation
+            if (project.plugins.hasPlugin('com.android.library')) {
+                println "Adding explicit Kotlin dependencies to expo-web-browser"
+
+                // Only add dependencies if the implementation configuration exists
+                if (project.configurations.findByName('implementation') != null) {
+                    project.dependencies {
+                        implementation "org.jetbrains.kotlin:kotlin-stdlib:1.7.20"
+                        implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.20"
+                        implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.20"
+                    }
+                }
+
+                // Apply resolution strategy
+                project.configurations.all { config ->
+                    config.resolutionStrategy {
+                        force "org.jetbrains.kotlin:kotlin-stdlib:1.7.20"
+                        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.20"
+                        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.20"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Apply to all subprojects that match
+gradle.allprojects(fixModule)

@@ -1,0 +1,19 @@
+<resources>
+  <color name="splashscreen_background">#ffffff</color>
+  <color name="colorPrimary">#023c69</color>
+  <color name="colorPrimaryDark">#ffffff</color>
+  <color name="colorAccent">#f4a261</color>
+  <color name="iconBackground">#ffffff</color>
+  <color name="textPrimary">#212121</color>
+  <color name="textSecondary">#757575</color>
+  <color name="explorationHighlight">#81c784</color>
+  <color name="waterHighlight">#2196F3</color>
+  <color name="cityHighlight">#9E9E9E</color>
+  <color name="airHighlight">#FFEB3B</color>
+  <color name="snowHighlight">#BBDEFB</color>
+  <color name="vehicleHighlight">#F44336</color>
+  <color name="buttonColor">#f4a261</color>
+  <color name="buttonTextColor">#ffffff</color>
+  <color name="cardBackground">#f5f5f5</color>
+  <color name="dividerColor">#e0e0e0</color>
+</resources>
