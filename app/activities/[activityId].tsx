@@ -1,34 +1,102 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export default function ActivityDetailScreen() {
-  const { activityId } = useLocalSearchParams<{ activityId: string }>();
+  const { activityId, categoryId, activityTypeId } = useLocalSearchParams<{ activityId: string, categoryId: string, activityTypeId: string }>();
   const [activity, setActivity] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadActivity() {
-      try {
-        if (activityId) {
-          const docRef = doc(db, 'activities', activityId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setActivity(docSnap.data());
-          } else {
-            console.warn('Activity not found');
+  try {
+    if (activityId) {
+      let foundActivity = null;
+      
+      // If we have categoryId and activityTypeId from params, use the direct path
+      if (categoryId && activityTypeId) {
+        console.log(`Loading activity with direct path: categories/${categoryId}/activities/${activityTypeId}/items/${activityId}`);
+        
+        const docRef = doc(
+          collection(
+            doc(
+              collection(
+                doc(db, 'categories', categoryId),
+                'activities'
+              ),
+              activityTypeId
+            ),
+            'items'
+          ),
+          activityId
+        );
+        
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          foundActivity = {
+            id: docSnap.id,
+            itemId: docSnap.id,
+            activityTypeId,
+            categoryId,
+            ...docSnap.data()
+          };
+        }
+      } 
+      // Otherwise, we need to search through all categories
+      else {
+        console.log(`No direct path available, searching for activity: ${activityId}`);
+        
+        // Get all categories
+        const categoriesSnap = await getDocs(collection(db, 'categories'));
+        
+        // For each category
+        for (const categoryDoc of categoriesSnap.docs) {
+          if (foundActivity) break; // Stop if we found it
+          
+          const catId = categoryDoc.id;
+          const activityTypesSnap = await getDocs(collection(doc(db, 'categories', catId), 'activities'));
+          
+          // For each activity type
+          for (const activityTypeDoc of activityTypesSnap.docs) {
+            if (foundActivity) break; // Stop if we found it
+            
+            const actTypeId = activityTypeDoc.id;
+            const itemsRef = collection(doc(collection(doc(db, 'categories', catId), 'activities'), actTypeId), 'items');
+            
+            // Check if this activityId exists in the items collection
+            const docSnap = await getDoc(doc(itemsRef, activityId));
+            
+            if (docSnap.exists()) {
+              foundActivity = {
+                id: docSnap.id,
+                itemId: docSnap.id,
+                activityTypeId: actTypeId,
+                categoryId: catId,
+                ...docSnap.data()
+              };
+              break;
+            }
           }
         }
-      } catch (error) {
-        console.error('Error loading activity:', error);
-      } finally {
-        setLoading(false);
+      }
+      
+      if (foundActivity) {
+        setActivity(foundActivity);
+      } else {
+        console.warn('Activity not found');
       }
     }
+  } catch (error) {
+    console.error('Error loading activity:', error);
+  } finally {
+    setLoading(false);
+  }
+}
     loadActivity();
-  }, [activityId]);
+  }, [activityId, categoryId]);
 
   return (
     <SafeAreaView style={styles.container}>

@@ -7,12 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ActivityMarker from '../_components/ActivityMarker';
+import ActivityDetailModal from '../_components/ActivityDetailModal';
 import { db } from '../firebaseConfig';
 import { collection, getDocs, doc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import { useAuth } from '../_context/AuthContext';
 
-// Updated with the complete map style from the first file
-const outdoorMapStyle = [
+// Export the map style so it can be used in ActivityTracker
+export const outdoorMapStyle = [
   {
     elementType: 'geometry',
     stylers: [{ color: '#ebe3cd' }],
@@ -130,8 +131,43 @@ const outdoorMapStyle = [
     elementType: 'labels.text.fill',
     stylers: [{ color: '#92998d' }],
   },
+  // Hide all POIs
+  {
+    featureType: 'poi',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.business',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.government',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.school',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.medical',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.attraction',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.place_of_worship',
+    stylers: [{ visibility: 'off' }]
+  },
+  {
+    featureType: 'poi.sports_complex',
+    stylers: [{ visibility: 'off' }]
+  }
 ];
 
+// Fallback location if user location is not available
 const defaultLocation = {
   latitude: 50.8503,
   longitude: 4.3517,
@@ -152,6 +188,7 @@ type ActivityType = {
   startPoint: { latitude: number; longitude: number };
   category: string;
   activityType: string;
+  createdAt?: any;
 };
 
 export default function MapScreen() {
@@ -162,6 +199,11 @@ export default function MapScreen() {
   const [locationDenied, setLocationDenied] = useState(false);
   const mapRef = useRef<MapView>(null);
   const router = useRouter();
+  
+  // States for activity details modal
+  const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  
   // Add user role check
   const { userRole } = useAuth();
   const canUseBuilder = userRole === 'pathfinder' || userRole === 'expeditionary' || userRole === 'admin';
@@ -175,140 +217,136 @@ export default function MapScreen() {
     Urban: 'Urban'
   };
 
+  // No placeholder activities as requested
+
   // Get user location
   useEffect(() => {
     (async () => {
       try {
+        console.log("Requesting location permissions...");
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const userLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          console.log("Permission granted, getting current position...");
+          const userLocation = await Location.getCurrentPositionAsync({ 
+            accuracy: Location.Accuracy.Balanced 
+          });
+          console.log("Location received:", userLocation.coords);
           setLocation(userLocation.coords);
+          
+          // Immediately center map on user location once we have it
+          if (mapRef.current && userLocation.coords) {
+            console.log("Centering map on user location");
+            mapRef.current.animateToRegion({
+              latitude: userLocation.coords.latitude,
+              longitude: userLocation.coords.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01
+            });
+          }
         } else {
+          console.log("Location permission denied");
           setLocationDenied(true);
           setErrorMsg('Location permission denied');
         }
       } catch (e: any) {
+        console.error("Error getting location:", e);
         setErrorMsg(e.message);
       }
     })();
   }, []);
 
   // Load activities
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const activities: ActivityType[] = [];
-        
-        // Get all categories
-        const categoriesSnap = await getDocs(collection(db, 'categories'));
-        
-        // For each category
-        for (const categoryDoc of categoriesSnap.docs) {
-          const categoryId = categoryDoc.id;
-          
-          // Get all activities for this category
-          const activitiesRef = collection(doc(db, 'categories', categoryId), 'activities');
-          const activitiesSnap = await getDocs(activitiesRef);
-          
-          // For each activity type
-          for (const activityTypeDoc of activitiesSnap.docs) {
-            const activityTypeId = activityTypeDoc.id;
-            
-            // Get all items for this activity type
-            const itemsRef = collection(doc(activitiesRef, activityTypeId), 'items');
-            const itemsSnap = await getDocs(itemsRef);
-            
-            // Map the items to our ActivityType format
-            const activityItems = itemsSnap.docs
-              .map(d => {
-                const data = d.data();
-                // Determine start point based on mode
-                let startPoint = null;
-                
-                if (data.startPoint) {
-                  // Use the pre-calculated startPoint if available
-                  startPoint = data.startPoint;
-                } else if (data.mode === 'spot' && data.location) {
-                  startPoint = data.location;
-                } else if (data.mode === 'path' && data.route && data.route.length > 0) {
-                  startPoint = data.route[0];
-                } else if (data.mode === 'checkpoints' && data.checkpoints && data.checkpoints.length > 0) {
-                  startPoint = data.checkpoints[0];
-                }
-                
-                // Only add if we have a valid startPoint
-                if (startPoint && typeof startPoint.latitude === 'number' && 
-                    typeof startPoint.longitude === 'number' && data.title) {
-                  return {
-                    id: d.id,
-                    title: data.title,
-                    description: data.description || '',
-                    locationType: data.mode,
-                    startPoint,
-                    category: categoryId,
-                    activityType: activityTypeId
-                  };
-                }
-                return null;
-              })
-              .filter(Boolean) as ActivityType[];
-            
-            activities.push(...activityItems);
-          }
-        }
-        
-        setActivities(activities);
-        console.log(`Loaded ${activities.length} activities from new structure`);
-      } catch (error) {
-        console.error('Error loading activities:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  // Migration helper for existing data (run once if needed)
-  const migrateActivities = async () => {
+useEffect(() => {
+  (async () => {
     try {
-      // Get all existing activities
-      const activitiesSnap = await getDocs(collection(db, 'activities'));
+      setLoading(true);
+      const fetchedActivities: ActivityType[] = [];
+      console.log("Starting to fetch activities from Firebase...");
       
-      for (const activityDoc of activitiesSnap.docs) {
-        const activity = activityDoc.data();
+      // Get all categories
+      const categoriesSnap = await getDocs(collection(db, 'categories'));
+      console.log(`Found ${categoriesSnap.docs.length} categories`);
+      
+      // For each category
+      for (const categoryDoc of categoriesSnap.docs) {
+        const categoryId = categoryDoc.id;
         
-        // Skip if missing required data
-        if (!activity.category || !activity.activityType) continue;
+        // Get all activity types in this category
+        const activityTypesSnap = await getDocs(collection(doc(db, 'categories', categoryId), 'activities'));
         
-        // Format the activity type path
-        const activityTypeFormatted = activity.activityType.replace(/_/g, '_');
-        
-        // Create the path structure
-        const categoryRef = collection(db, 'categories');
-        const categoryDoc = doc(categoryRef, activity.category);
-        const activitiesRef = collection(categoryDoc, 'activities');
-        const activityTypeRef = doc(activitiesRef, activityTypeFormatted);
-        
-        // Ensure activity type document exists
-        const activityTypeDoc = await getDoc(activityTypeRef);
-        if (!activityTypeDoc.exists()) {
-          await setDoc(activityTypeRef, {
-            displayName: activity.activityType.replace(/_/g, ' ')
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(' ')
+        // For each activity type
+        for (const activityTypeDoc of activityTypesSnap.docs) {
+          const activityTypeId = activityTypeDoc.id;
+          
+          // Get all items under this activity type
+          const itemsRef = collection(doc(collection(doc(db, 'categories', categoryId), 'activities'), activityTypeId), 'items');
+          const itemsSnap = await getDocs(itemsRef);
+          
+          // Process each item
+          itemsSnap.docs.forEach(itemDoc => {
+            const data = itemDoc.data();
+            
+            // Determine start point based on mode
+            let startPoint = null;
+            
+            if (data.startPoint) {
+              startPoint = data.startPoint;
+            } else if (data.mode === 'spot' && data.location) {
+              startPoint = data.location;
+            } else if (data.mode === 'path' && data.route && data.route.length > 0) {
+              startPoint = data.route[0];
+            } else if (data.mode === 'checkpoints' && data.checkpoints && data.checkpoints.length > 0) {
+              startPoint = data.checkpoints[0];
+            }
+            
+            // Add to fetched activities if valid
+            if (startPoint && typeof startPoint.latitude === 'number' && 
+                typeof startPoint.longitude === 'number' && data.title) {
+              fetchedActivities.push({
+                id: itemDoc.id,
+                title: data.title,
+                description: data.description || '',
+                locationType: data.mode,
+                startPoint,
+                category: categoryId,
+                activityType: data.activityType || activityTypeId,
+                categoryId, // Add these for reference
+                activityTypeId, // Add these for reference
+                itemId: itemDoc.id, // Add these for reference
+                createdAt: data.createdAt || null
+              });
+            }
           });
         }
-        
-        // Add the activity to the new structure
-        const activityCollectionRef = collection(activityTypeRef, 'items');
-        await addDoc(activityCollectionRef, activity);
       }
       
-      console.log('Migration completed successfully');
+      console.log(`Loaded ${fetchedActivities.length} activities from Firebase`);
+      setActivities(fetchedActivities);
     } catch (error) {
-      console.error('Migration error:', error);
+      console.error('Error loading activities:', error);
+      setActivities([]);
+    } finally {
+      setLoading(false);
     }
+  })();
+}, []);
+
+  // Handle activity marker selection
+  const handleActivitySelect = (activityId: string) => {
+    // Find the selected activity
+    const activity = activities.find(a => a.id === activityId);
+    if (activity) {
+      // Update selected activity and show modal
+      setSelectedActivity(activity);
+      setModalVisible(true);
+    }
+  };
+
+  // Close the activity detail modal
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    // Clear the selected activity after animation completes
+    setTimeout(() => setSelectedActivity(null), 300);
   };
 
   if (loading) {
@@ -320,6 +358,7 @@ export default function MapScreen() {
     );
   }
 
+  // Use user location if available, otherwise use default
   const mapRegion = location
     ? {
         latitude: location.latitude,
@@ -337,12 +376,8 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Map + header wrapper */}
+      {/* Map container without header */}
       <View style={styles.mapContainer}>
-        <View style={styles.mapHeader}>
-          <Text style={styles.mapHeaderText}>Explorien Map</Text>
-        </View>
-
         <MapView
           ref={mapRef}
           provider={PROVIDER_GOOGLE}
@@ -358,7 +393,44 @@ export default function MapScreen() {
           toolbarEnabled={false}
           zoomControlEnabled={false}
         >
-          {/* only valid MapView children */}
+            {/* Debug: Log number of activities rendered */}
+  {console.log("🎯 Rendering markers count:", activities.length)}
+
+  {/* Debug: Log each activity */}
+  {activities.map(act => {
+    console.log("📍 Marker props:", {
+      id: act.id,
+      coordinate: act.startPoint,
+      title: act.title,
+      category: act.category,
+      activity: act.activityType
+    });
+    return (
+      <ActivityMarker
+        key={act.id}
+        id={act.id}
+        coordinate={act.startPoint}
+        title={act.title}
+        description={act.description}
+        category={act.category}
+        activity={act.activityType}
+        size={45}
+        displayName={categoryDisplayNames[act.category] || act.category}
+        onPress={handleActivitySelect}
+      />
+    );
+  })}
+
+  {/* Static test marker (always appears if working) */}
+  <ActivityMarker
+    id="test-marker"
+    coordinate={{ latitude: 41.8967, longitude: 12.4822 }}
+    title="Test"
+    description="Test marker"
+    category="Urban"
+    activity="urban_hiking"
+  />
+          {/* Map markers for activities */}
           {activities.map(act => (
             <ActivityMarker
               key={act.id}
@@ -370,19 +442,30 @@ export default function MapScreen() {
               activity={act.activityType}
               size={45}
               displayName={categoryDisplayNames[act.category] || act.category}
+              onPress={handleActivitySelect}
             />
           ))}
         </MapView>
 
-        {/* moved outside MapView */}
+        {/* Empty state message */}
         {activities.length === 0 && (
           <View style={styles.centerOverlay}>
             <Text style={styles.noActivitiesText}>No activities found yet!</Text>
           </View>
         )}
+
+        {/* Activity Detail Modal */}
+        <ActivityDetailModal
+          visible={modalVisible}
+          onClose={handleCloseModal}
+          activity={selectedActivity ? {
+            ...selectedActivity,
+            coordinate: selectedActivity.startPoint  // Map startPoint to coordinate for the modal
+          } : null}
+        />
       </View>
 
-      {/* controls */}
+      {/* Map controls */}
       <View style={styles.customControls}>
         <TouchableOpacity
           style={styles.controlButton}
@@ -397,7 +480,12 @@ export default function MapScreen() {
           style={styles.controlButton}
           onPress={() => {
             if (location) {
-              mapRef.current?.animateToRegion(mapRegion);
+              mapRef.current?.animateToRegion({
+                latitude: location.latitude,
+                longitude: location.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01
+              });
             } else {
               setErrorMsg('Location access denied');
               setTimeout(() => setErrorMsg(null), 3000);
@@ -409,26 +497,38 @@ export default function MapScreen() {
 
         {/* Builder button - only shown to paid users */}
         {canUseBuilder && (
-  <TouchableOpacity
-    style={styles.controlButton}
-    onPress={() => router.push('/screens/ActivityBuilderStep1')}
-  >
-    <FontAwesome5 name="drafting-compass" size={22} color="#fff" />
-  </TouchableOpacity>
-)}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => router.push('/screens/ActivityBuilderStep1')}
+          >
+            <FontAwesome5 name="drafting-compass" size={22} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  mapContainer: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
-  mapHeader: { backgroundColor: '#2196F3', padding: 10, alignItems: 'center' },
-  mapHeaderText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  map: { flex: 1 },
+  container: { 
+    flex: 1 
+  },
+  mapContainer: { 
+    flex: 1 
+  },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  loadingText: { 
+    marginTop: 10, 
+    fontSize: 16, 
+    color: '#666' 
+  },
+  map: { 
+    flex: 1 
+  },
   centerOverlay: {
     position: 'absolute',
     top: '50%',
@@ -436,9 +536,19 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center'
   },
-  noActivitiesText: { fontSize: 16, color: '#777' },
-  errorBanner: { backgroundColor: '#ffcccc', padding: 8, alignItems: 'center' },
-  errorText: { color: '#cc0000', fontSize: 14 },
+  noActivitiesText: { 
+    fontSize: 16, 
+    color: '#777' 
+  },
+  errorBanner: { 
+    backgroundColor: '#ffcccc', 
+    padding: 8, 
+    alignItems: 'center' 
+  },
+  errorText: { 
+    color: '#cc0000', 
+    fontSize: 14 
+  },
   customControls: {
     position: 'absolute',
     right: 15,
@@ -458,16 +568,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3
-  },
-  migrateButton: {
-    backgroundColor: '#FF6B00',
-    padding: 12,
-    alignItems: 'center',
-    margin: 10,
-    borderRadius: 8,
-  },
-  migrateButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
   }
 });

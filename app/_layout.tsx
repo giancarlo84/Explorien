@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import useColorScheme from '@/_hooks/useColorScheme';
 import { ActivityBuilderProvider } from '@/_context/ActivityBuilderContext';
 import { AuthProvider, useAuth } from '@/_context/AuthContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -48,22 +49,24 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <ActivityBuilderProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="auth/login" options={{ 
-              title: 'Login', 
-              headerBackVisible: false 
-            }} />
-            <Stack.Screen name="auth/signup" options={{ title: 'Sign Up' }} />
-            <Stack.Screen name="auth/forgot-password" options={{ title: 'Reset Password' }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </ActivityBuilderProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ActivityBuilderProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/login" options={{ 
+                title: 'Login', 
+                headerBackVisible: false 
+              }} />
+              <Stack.Screen name="auth/signup" options={{ title: 'Sign Up' }} />
+              <Stack.Screen name="auth/forgot-password" options={{ title: 'Reset Password' }} />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </ActivityBuilderProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

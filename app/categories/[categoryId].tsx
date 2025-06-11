@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export default function CategoryActivitiesScreen() {
@@ -11,21 +11,51 @@ export default function CategoryActivitiesScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    async function loadActivities() {
-      try {
-        const q = query(collection(db, 'activities'), where('category', '==', categoryId));
-        const snap = await getDocs(q);
-        const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setActivities(items);
-      } catch (error) {
-        console.error('Error loading activities for category:', error);
-      } finally {
-        setLoading(false);
-      }
+  async function loadActivities() {
+   try {
+    if (!categoryId) {
+      console.warn("No categoryId provided");
+      setActivities([]);
+      return;
     }
-    if (categoryId) {
-      loadActivities();
+    
+    setLoading(true);
+    const fetchedActivities = [];
+    
+    // Get all activity types for this category
+    const activityTypesRef = collection(doc(db, 'categories', categoryId), 'activities');
+    const activityTypesSnap = await getDocs(activityTypesRef);
+    
+    // For each activity type
+    for (const activityTypeDoc of activityTypesSnap.docs) {
+      const activityTypeId = activityTypeDoc.id;
+      
+      // Get all items
+      const itemsRef = collection(doc(activityTypesRef, activityTypeId), 'items');
+      const itemsSnap = await getDocs(itemsRef);
+      
+      // Process each item
+      itemsSnap.docs.forEach(itemDoc => {
+        fetchedActivities.push({
+          id: itemDoc.id,
+          itemId: itemDoc.id,
+          activityTypeId: activityTypeId,
+          categoryId: categoryId,
+          ...itemDoc.data()
+        });
+      });
     }
+    
+    setActivities(fetchedActivities);
+  } catch (error) {
+    console.error('Error loading activities for category:', error);
+    setActivities([]);
+  } finally {
+    setLoading(false);
+  }
+}
+    
+    loadActivities();
   }, [categoryId]);
 
   return (
@@ -45,7 +75,10 @@ export default function CategoryActivitiesScreen() {
               <TouchableOpacity
                 key={activity.id}
                 style={styles.activityCard}
-                onPress={() => router.push(`/activities/${activity.id}`)} // (future)
+                onPress={() => router.push({
+                  pathname: `/activities/${activity.id}`,
+                  params: { categoryId: categoryId }
+                })}
               >
                 <Text style={styles.activityName}>{activity.title || 'Untitled Activity'}</Text>
                 <Text style={styles.activityDescription}>{activity.description || 'No description provided'}</Text>

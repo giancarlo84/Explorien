@@ -21,6 +21,7 @@ LogBox.ignoreLogs(['Support for defaultProps will be removed']);
 
 interface UserData {
   displayName?: string;
+  username?: string; // Add username field
   photoURL?: string;
   email: string;
   firstName?: string;
@@ -102,7 +103,7 @@ export default function Profile() {
     <>
       <Stack.Screen
         options={{
-          headerTitle: userData.displayName || userData.email,
+          headerTitle: userData.displayName || userData.username || userData.email,
           headerRight: () => (
             <TouchableOpacity onPress={toggleEdit} style={styles.headerButton}>
               <FontAwesome5 name={editing ? 'save' : 'pen'} size={20} color="#FF6B00" />
@@ -118,25 +119,44 @@ export default function Profile() {
               ? <Image source={{ uri: userData.photoURL }} style={styles.avatar} />
               : <FontAwesome5 name="user-circle" size={96} color="#ccc" />}
           </TouchableOpacity>
-          <Text style={styles.displayNameText}>{userData.displayName || userData.email}</Text>
-          <Text style={styles.role}>{userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}</Text>
+          <Text style={styles.displayNameText}>
+            {userData.displayName || userData.username || userData.email}
+          </Text>
+          {userData.username && (
+            <Text style={styles.usernameText}>@{userData.username}</Text>
+          )}
+          <Text style={styles.role}>
+            {userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}
+          </Text>
         </View>
 
         {editing ? (
           <>
-            <Text>First Name</Text>
+            <Text style={styles.fieldLabel}>Display Name</Text>
             <TextInput
               style={styles.input}
-              value={userData.firstName}
+              value={userData.displayName || ''}
+              placeholder="Enter display name"
+              onChangeText={text => setUserData({ ...userData, displayName: text })}
+            />
+            
+            <Text style={styles.fieldLabel}>First Name</Text>
+            <TextInput
+              style={styles.input}
+              value={userData.firstName || ''}
+              placeholder="Enter first name"
               onChangeText={text => setUserData({ ...userData, firstName: text })}
             />
-            <Text>Last Name</Text>
+            
+            <Text style={styles.fieldLabel}>Last Name</Text>
             <TextInput
               style={styles.input}
-              value={userData.lastName}
+              value={userData.lastName || ''}
+              placeholder="Enter last name"
               onChangeText={text => setUserData({ ...userData, lastName: text })}
             />
-            <Text>Country</Text>
+            
+            <Text style={styles.fieldLabel}>Country</Text>
             <View style={styles.input}>
               <CountryPicker
                 countryCode={userData.countryCode || 'US'}
@@ -149,10 +169,12 @@ export default function Profile() {
               />
               <FontAwesome5 name="chevron-down" style={styles.dropdownIcon} size={14} color="#333" />
             </View>
-            <Text>Bio</Text>
+            
+            <Text style={styles.fieldLabel}>Bio</Text>
             <TextInput
               style={[styles.input, { height: 80 }]}
-              value={userData.bio}
+              value={userData.bio || ''}
+              placeholder="Tell us about yourself..."
               multiline
               onChangeText={text => setUserData({ ...userData, bio: text })}
             />
@@ -160,7 +182,9 @@ export default function Profile() {
         ) : (
           <>
             <Text style={styles.inlineInfo}>
-              {userData.firstName} {userData.lastName} {flagEmoji && `• ${flagEmoji} ${userData.countryName}`}
+              {userData.firstName && userData.lastName && 
+                `${userData.firstName} ${userData.lastName} `}
+              {flagEmoji && `• ${flagEmoji} ${userData.countryName}`}
             </Text>
             {userData.bio && <Text style={styles.bioText}>{userData.bio}</Text>}
           </>
@@ -170,13 +194,25 @@ export default function Profile() {
 
         <View style={styles.statsContainer}>
           <View style={styles.statsRow}>
-            <View style={styles.statCard}><Text style={styles.statValue}>{userData.level}</Text><Text style={styles.statLabel}>Level</Text></View>
-            <View style={styles.statCard}><Text style={styles.statValue}>{userData.xp}</Text><Text style={styles.statLabel}>XP</Text></View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{userData.level}</Text>
+              <Text style={styles.statLabel}>Level</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{userData.xp}</Text>
+              <Text style={styles.statLabel}>XP</Text>
+            </View>
           </View>
           <View style={styles.statsRow}>
-            <View style={styles.statCard}><Text style={styles.statValue}>{userData.activitiesCompleted}</Text><Text style={styles.statLabel}>Completed</Text></View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{userData.activitiesCompleted}</Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </View>
             {userData.role !== 'thrillseeker' && (
-              <View style={styles.statCard}><Text style={styles.statValue}>{userData.activitiesCreated || 0}</Text><Text style={styles.statLabel}>Created</Text></View>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{userData.activitiesCreated || 0}</Text>
+                <Text style={styles.statLabel}>Created</Text>
+              </View>
             )}
           </View>
         </View>
@@ -194,7 +230,9 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 20 },
   avatar: { width: 96, height: 96, borderRadius: 48, marginBottom: 8 },
   displayNameText: { fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
+  usernameText: { fontSize: 16, color: '#2196F3', marginBottom: 4, textAlign: 'center' },
   role: { fontSize: 16, color: '#666', marginBottom: 12, textAlign: 'center' },
+  fieldLabel: { fontSize: 16, fontWeight: '500', marginBottom: 4, marginTop: 8, color: '#333' },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',

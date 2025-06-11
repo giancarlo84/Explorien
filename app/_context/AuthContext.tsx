@@ -14,11 +14,18 @@ import { auth, db } from '../firebaseConfig';
 // Define user roles for Explorien
 export type UserRole = 'thrillseeker' | 'pathfinder' | 'expeditionary' | 'admin';
 
-// Extended user type with Explorien-specific properties
+
+// Extended user type with Explorien-specific properties - Replace the current ExplorenUser interface
 export interface ExplorenUser extends User {
   role?: UserRole;
   displayName?: string | null;
   photoURL?: string | null;
+  // Add Firestore-specific fields
+  xp?: number;
+  level?: number;
+  achievements?: any[];
+  activitiesCompleted?: number;
+  username?: string;
 }
 
 // Context type definition
@@ -26,7 +33,7 @@ interface AuthContextType {
   currentUser: ExplorenUser | null;
   userRole: UserRole | null;
   loading: boolean;
-  signup: (email: string, password: string, role?: UserRole) => Promise<void>;
+  signup: (email: string, password: string, username: string, role?: UserRole) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -51,31 +58,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Create a new user
-  async function signup(email: string, password: string, role: UserRole = 'thrillseeker') {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Create user profile in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        email,
-        role,
-        createdAt: new Date(),
-        // Add other initial profile fields for Explorien
-        achievements: [],
-        xp: 0,
-        level: 1,
-        activitiesCompleted: 0,
-        lastActive: new Date()
-      });
-      
-      return;
-    } catch (error) {
-      console.error("Error during signup:", error);
-      throw error;
-    }
+  // Create a new user - Updated to include username parameter
+async function signup(email: string, password: string, username: string, role: UserRole = 'thrillseeker') {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Create user profile in Firestore with username
+    await setDoc(doc(db, 'users', user.uid), {
+      email: email.toLowerCase(),
+      username: username.toLowerCase(), // Store username in lowercase for consistency
+      displayName: username, // Use username as display name
+      role,
+      createdAt: new Date(),
+      // Add other initial profile fields for Explorien
+      achievements: [],
+      xp: 0,
+      level: 1,
+      activitiesCompleted: 0,
+      lastActive: new Date()
+    });
+    
+    return;
+  } catch (error) {
+    console.error("Error during signup:", error);
+    throw error;
   }
+}
 
   // Login existing user
   async function login(email: string, password: string) {
@@ -107,22 +116,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   // Listen for auth state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Update current user with Explorien-specific properties
-        const role = await fetchUserRole(user.uid);
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      try {
+        // Get user document from Firestore
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          
+          // Merge Auth user with Firestore user data
+          setCurrentUser({
+            ...user,
+            role: userData.role,
+            displayName: user.displayName || userData.displayName || userData.username,
+            // You can add other Firestore fields here if needed
+            xp: userData.xp,
+            level: userData.level,
+            achievements: userData.achievements
+          } as ExplorenUser);
+          
+          setUserRole(userData.role as UserRole);
+        } else {
+          // If no Firestore document exists, use just the Auth user
+          console.log(`No user document found for uid: ${user.uid}`);
+          setCurrentUser(user as ExplorenUser);
+          setUserRole(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        // Fallback to just the Auth user if Firestore fails
         setCurrentUser(user as ExplorenUser);
-        setUserRole(role);
-      } else {
-        setCurrentUser(null);
         setUserRole(null);
       }
-      setLoading(false);
-    });
+    } else {
+      setCurrentUser(null);
+      setUserRole(null);
+    }
+    setLoading(false);
+  });
 
-    return unsubscribe;
-  }, []);
+  return unsubscribe;
+}, []);
 
   const value = {
     currentUser,

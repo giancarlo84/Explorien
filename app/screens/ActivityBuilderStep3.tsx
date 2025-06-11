@@ -12,9 +12,10 @@ import {
 import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import { ActivityBuilderContext } from '../_context/ActivityBuilderContext';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { collection, addDoc, serverTimestamp, doc, setDoc, getDoc } from 'firebase/firestore';
 import { reverseGeocode } from '../utils/geoUtils';
+import { useAuth } from '../_context/AuthContext';
 
 // Create read-only difficulty blocks component
 const ReadOnlyDifficultyBlocks = ({ value }) => {
@@ -77,13 +78,12 @@ const ReadOnlyDifficultyBlocks = ({ value }) => {
 const ActivityBuilderStep3 = () => {
   const activityBuilderContext = useContext(ActivityBuilderContext);
   const router = useRouter();
+  const { user } = useAuth();
   const [publishing, setPublishing] = useState(false);
   
   // State for storing location name and loading status
-  const [locationInfo, setLocationInfo] = useState({
-    locationName: null,
-    loading: false
-  });
+  const [locationNames, setLocationNames] = useState({});
+const [locationLoading, setLocationLoading] = useState(false);
   
   // Map refs for auto-zoom functionality
   const mapRef1 = useRef(null); // Map when no image
@@ -173,113 +173,93 @@ const ActivityBuilderStep3 = () => {
   }, [builderState]);
   
   // Effect to get location name when location changes
-  useEffect(() => {
-    const getLocationName = async () => {
-      if (!builderState) return;
-      
-      // For spot mode
-      if (builderState.mode === 'spot' && builderState.location) {
-        try {
-          setLocationInfo(prev => ({ ...prev, loading: true }));
-          console.log('Attempting to geocode spot location...', builderState.location);
-          
-          const placeName = await reverseGeocode(
-            builderState.location.latitude, 
-            builderState.location.longitude
-          );
-          
-          console.log('Geocoding result for spot:', placeName);
-          setLocationInfo({
-            locationName: placeName,
-            loading: false
-          });
-        } catch (error) {
-          console.error('Failed to geocode spot location:', error);
-          setLocationInfo({
-            locationName: null,
-            loading: false
-          });
-        }
-      }
-      // For path mode
-      else if (builderState.mode === 'path' && builderState.route?.length > 0) {
-        try {
-          setLocationInfo(prev => ({ ...prev, loading: true }));
-          const startPoint = builderState.route[0];
-          const endPoint = builderState.route[builderState.route.length - 1];
-          
-          console.log('Geocoding start point...', startPoint);
-          const startName = await reverseGeocode(startPoint.latitude, startPoint.longitude);
-          
-          if (builderState.route.length > 1) {
-            console.log('Geocoding end point...', endPoint);
-            const endName = await reverseGeocode(endPoint.latitude, endPoint.longitude);
-            setLocationInfo({
-              locationName: `${startName} (Start) → ${endName} (Finish)`,
-              loading: false
-            });
-          } else {
-            setLocationInfo({
-              locationName: startName,
-              loading: false
-            });
-          }
-        } catch (error) {
-          console.error('Failed to geocode path locations:', error);
-          setLocationInfo({
-            locationName: null,
-            loading: false
-          });
-        }
-      }
-      // For checkpoints mode
-      else if (builderState.mode === 'checkpoints' && builderState.checkpoints?.length > 0) {
-        try {
-          setLocationInfo(prev => ({ ...prev, loading: true }));
-          const checkpoints = builderState.checkpoints;
-          
-          if (checkpoints.length === 1) {
-            const placeName = await reverseGeocode(
-              checkpoints[0].latitude, checkpoints[0].longitude
-            );
-            setLocationInfo({
-              locationName: placeName,
-              loading: false
-            });
-          } else {
-            const startName = await reverseGeocode(
-              checkpoints[0].latitude, checkpoints[0].longitude
-            );
-            const endName = await reverseGeocode(
-              checkpoints[checkpoints.length-1].latitude, 
-              checkpoints[checkpoints.length-1].longitude
-            );
-            
-            if (checkpoints.length === 2) {
-              setLocationInfo({
-                locationName: `${startName} (Start) → ${endName} (Finish)`,
-                loading: false
-              });
-            } else {
-              // For simplicity, just show start and end for 3+ checkpoints
-              setLocationInfo({
-                locationName: `${startName} (Start) → ${endName} (Finish)`,
-                loading: false
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Failed to geocode checkpoint locations:', error);
-          setLocationInfo({
-            locationName: null,
-            loading: false
-          });
-        }
-      }
-    };
+useEffect(() => {
+  const getLocationName = async () => {
+    if (!builderState) return;
     
-    getLocationName();
-  }, [builderState?.mode, builderState?.location, builderState?.route, builderState?.checkpoints]);
+    // For spot mode
+    if (builderState.mode === 'spot' && builderState.location) {
+      try {
+        setLocationLoading(true);
+        console.log('Attempting to geocode spot location...', builderState.location);
+        
+        const placeName = await reverseGeocode(
+          builderState.location.latitude, 
+          builderState.location.longitude
+        );
+        
+        console.log('Geocoding result for spot:', placeName);
+        setLocationNames(prev => ({ ...prev, single: placeName }));
+        setLocationLoading(false);
+      } catch (error) {
+        console.error('Failed to geocode spot location:', error);
+        setLocationNames(prev => ({ ...prev, single: null }));
+        setLocationLoading(false);
+      }
+    }
+    // For path mode
+    else if (builderState.mode === 'path' && builderState.route?.length > 0) {
+      try {
+        setLocationLoading(true);
+        const startPoint = builderState.route[0];
+        const endPoint = builderState.route[builderState.route.length - 1];
+        
+        console.log('Geocoding start point...', startPoint);
+        const startName = await reverseGeocode(startPoint.latitude, startPoint.longitude);
+        
+        if (builderState.route.length > 1) {
+          console.log('Geocoding end point...', endPoint);
+          const endName = await reverseGeocode(endPoint.latitude, endPoint.longitude);
+          setLocationNames(prev => ({ 
+            ...prev, 
+            start: startName, 
+            end: endName 
+          }));
+        } else {
+          setLocationNames(prev => ({ 
+            ...prev, 
+            start: startName 
+          }));
+        }
+        setLocationLoading(false);
+      } catch (error) {
+        console.error('Failed to geocode path locations:', error);
+        setLocationNames(prev => ({ ...prev, start: null, end: null }));
+        setLocationLoading(false);
+      }
+    }
+    // For checkpoints mode
+    else if (builderState.mode === 'checkpoints' && builderState.checkpoints?.length > 0) {
+      try {
+        setLocationLoading(true);
+        const checkpoints = builderState.checkpoints;
+        const newLocationNames = {};
+        
+        // Geocode each checkpoint
+        for (let i = 0; i < checkpoints.length; i++) {
+          try {
+            const placeName = await reverseGeocode(
+              checkpoints[i].latitude, 
+              checkpoints[i].longitude
+            );
+            newLocationNames[`checkpoint_${i}`] = placeName;
+          } catch (error) {
+            console.error(`Failed to geocode checkpoint ${i}:`, error);
+            newLocationNames[`checkpoint_${i}`] = null;
+          }
+        }
+        
+        setLocationNames(prev => ({ ...prev, ...newLocationNames }));
+        setLocationLoading(false);
+      } catch (error) {
+        console.error('Failed to geocode checkpoint locations:', error);
+        setLocationLoading(false);
+      }
+    }
+  };
+  
+  getLocationName();
+}, [builderState?.mode, builderState?.location, builderState?.route, builderState?.checkpoints]);
   
   // Format activity name to remove underscores and capitalize
   const formatActivityName = (activityName) => {
@@ -347,53 +327,67 @@ const ActivityBuilderStep3 = () => {
     return 'blue'; // Middle points
   };
   
-  // Get location display text
-  const getLocationDisplayText = () => {
-    if (locationInfo.loading) {
-      return 'Loading location...';
-    }
+  // Get location display text with geocoded names
+const getLocationDisplayText = () => {
+  if (locationLoading) {
+    return 'Loading location...';
+  }
+  
+  if (!builderState) return 'No location';
+  
+  // For path mode, show start and end names
+  if (builderState.mode === 'path' && builderState.route?.length > 0) {
+    const startPoint = builderState.route[0];
+    const endPoint = builderState.route[builderState.route.length - 1];
     
-    if (locationInfo.locationName) {
-      return locationInfo.locationName;
-    }
+    const startText = locationNames['start'] || `${startPoint.latitude.toFixed(6)}, ${startPoint.longitude.toFixed(6)}`;
+    const endText = locationNames['end'] || `${endPoint.latitude.toFixed(6)}, ${endPoint.longitude.toFixed(6)}`;
     
-    // Fallbacks based on activity mode
-    if (!builderState) return 'No location';
+    return `${startText} (Start) → ${endText} (Finish)`;
+  }
+  
+  // For checkpoints mode, show ALL checkpoint names
+  if (builderState.mode === 'checkpoints' && builderState.checkpoints?.length > 0) {
+    const checkpoints = builderState.checkpoints;
+    let locationText = '';
     
-    if (builderState.mode === 'spot' && builderState.location) {
-      return `${builderState.location.latitude.toFixed(6)}, ${builderState.location.longitude.toFixed(6)}`;
-    }
-    
-    if (builderState.mode === 'path' && builderState.route?.length > 0) {
-      const start = builderState.route[0];
-      const startCoords = `${start.latitude.toFixed(6)}, ${start.longitude.toFixed(6)}`;
+    for (let i = 0; i < checkpoints.length; i++) {
+      const checkpoint = checkpoints[i];
+      const placeName = locationNames[`checkpoint_${i}`];
       
-      if (builderState.route.length === 1) {
-        return startCoords;
+      let pointText;
+      if (placeName) {
+        pointText = placeName;
+      } else {
+        pointText = `${checkpoint.latitude.toFixed(6)}, ${checkpoint.longitude.toFixed(6)}`;
       }
       
-      const end = builderState.route[builderState.route.length - 1];
-      const endCoords = `${end.latitude.toFixed(6)}, ${end.longitude.toFixed(6)}`;
-      
-      return `${startCoords} (Start) → ${endCoords} (Finish)`;
-    }
-    
-    if (builderState.mode === 'checkpoints' && builderState.checkpoints?.length > 0) {
-      const start = builderState.checkpoints[0];
-      const startCoords = `${start.latitude.toFixed(6)}, ${start.longitude.toFixed(6)}`;
-      
-      if (builderState.checkpoints.length === 1) {
-        return startCoords;
+      // Add appropriate label
+      if (i === 0) {
+        pointText += ' (Start)';
+      } else if (i === checkpoints.length - 1) {
+        pointText += ' (Finish)';
+      } else {
+        pointText += ` (CP${i})`;
       }
       
-      const end = builderState.checkpoints[builderState.checkpoints.length - 1];
-      const endCoords = `${end.latitude.toFixed(6)}, ${end.longitude.toFixed(6)}`;
-      
-      return `${startCoords} (Start) → ${endCoords} (Finish)`;
+      if (i === 0) {
+        locationText = pointText;
+      } else {
+        locationText += ` → ${pointText}`;
+      }
     }
     
-    return 'No location';
-  };
+    return locationText;
+  }
+  
+  // For spot mode, show single location name
+  if (builderState.mode === 'spot' && builderState.location) {
+    return locationNames['single'] || `${builderState.location.latitude.toFixed(6)}, ${builderState.location.longitude.toFixed(6)}`;
+  }
+  
+  return 'No location';
+};
   
   const confirmPublish = () => {
     Alert.alert(
@@ -407,77 +401,136 @@ const ActivityBuilderStep3 = () => {
   };
 
   const handlePublish = async () => {
-    if (!builderState) {
-      Alert.alert('Error', 'Activity data is not available');
+  if (!builderState) {
+    Alert.alert('Error', 'Activity data is not available');
+    return;
+  }
+  
+  try {
+    setPublishing(true);
+    
+    // Get the current authenticated user
+    const currentUser = auth.currentUser;
+    
+    // Log user object for debugging
+    console.log("Current user object:", currentUser ? JSON.stringify({
+      uid: currentUser.uid,
+      displayName: currentUser.displayName,
+      email: currentUser.email,
+      providerId: currentUser.providerId
+    }) : "No user");
+    
+    // First check if we have a valid user
+    if (!currentUser || !currentUser.uid) {
+      console.error("No authenticated user found or missing UID");
+      Alert.alert('Authentication Error', 'Please sign in again before publishing an activity');
+      setPublishing(false);
       return;
     }
     
+    // Try to get the user's profile from Firestore
+    let userDisplayName = "Unnamed Explorer";
+    let userPhotoURL = null;
+    
     try {
-      setPublishing(true);
+      // Get the user document from Firestore
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
       
-      // Format activity data
-      const activity = {
-        title: builderState.title,
-        description: builderState.description,
-        tips: builderState.tips,
-        category: builderState.category,
-        activityType: builderState.activityType,
-        mode: builderState.mode,
-        difficulty: builderState.difficulty,
-        distanceKm: builderState.distanceKm,
-        spotRadius: builderState.spotRadius,
-        location: builderState.location,
-        route: builderState.route || null,
-        checkpoints: builderState.checkpoints || [],
-        gallery: builderState.gallery || [],
-        createdAt: serverTimestamp(),
-      };
-      
-      // Determine start point for activity
-      let startPoint = null;
-      if (builderState.mode === 'spot' && builderState.location) {
-        startPoint = builderState.location;
-        activity.startPoint = startPoint; // Add start point to activity data
-      } else if (builderState.mode === 'path' && builderState.route && builderState.route.length > 0) {
-        startPoint = builderState.route[0];
-        activity.startPoint = startPoint;
-      } else if (builderState.mode === 'checkpoints' && builderState.checkpoints && builderState.checkpoints.length > 0) {
-        startPoint = builderState.checkpoints[0];
-        activity.startPoint = startPoint;
+      if (userDoc.exists()) {
+  const userData = userDoc.data();
+  
+  // Get the display name from the user document if available
+  if (userData.displayName) {
+    userDisplayName = userData.displayName;
+  } else if (userData.username) {
+    // Use username as fallback if no displayName
+    userDisplayName = userData.username;
+  }
+  
+  // Use profile photo if available
+  if (userData.photoURL) {
+    userPhotoURL = userData.photoURL;
+  }
+  console.log(`Found user profile in Firestore: ${userDisplayName}`);
+      } else {
+        console.log(`No user document found for uid: ${currentUser.uid}`);
       }
-      
-      // Format activity type for storage
-      const activityTypeFormatted = builderState.activityType.replace(/-/g, '_');
-      
-      // First ensure the category collection exists
-      const categoryRef = collection(db, 'categories');
-      const categoryDoc = doc(categoryRef, builderState.category);
-      
-      // Then add to the activities subcollection under the category
-      const activitiesRef = collection(categoryDoc, 'activities');
-      
-      // Use the activity type as the document ID
-      const activityTypeRef = doc(activitiesRef, activityTypeFormatted);
-      
-      // Check if the activity type document exists, create if not
-      const activityTypeDoc = await getDoc(activityTypeRef);
-      if (!activityTypeDoc.exists()) {
-        await setDoc(activityTypeRef, {
-          displayName: formatActivityName(builderState.activityType)
-        });
-      }
-      
-      // Add the activity to the specific activity type
-      await addDoc(collection(activityTypeRef, 'items'), activity);
-      
-      router.replace('/screens/ActivityCreatedScreen');
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', err.message || 'Failed to publish activity');
-    } finally {
-      setPublishing(false);
+    } catch (userError) {
+      console.error("Error fetching user data:", userError);
+      // Continue with default values since this isn't critical
     }
-  };
+    
+    // If Firestore doesn't have a name but Auth does, use that
+    if (userDisplayName === "Unnamed Explorer" && currentUser.displayName) {
+      userDisplayName = currentUser.displayName;
+    }
+    
+    // If no photo URL from Firestore but Auth has one, use that
+    if (!userPhotoURL && currentUser.photoURL) {
+      userPhotoURL = currentUser.photoURL;
+    }
+    
+    // Format activity data with improved user attribution
+    const activity = {
+      title: builderState.title,
+      description: builderState.description,
+      tips: builderState.tips,
+      category: builderState.category,
+      activityType: builderState.activityType,
+      mode: builderState.mode,
+      difficulty: builderState.difficulty,
+      distanceKm: builderState.distanceKm,
+      spotRadius: builderState.spotRadius,
+      location: builderState.location,
+      route: builderState.route || null,
+      checkpoints: builderState.checkpoints || [],
+      gallery: builderState.gallery || [],
+      createdAt: serverTimestamp(),
+      
+      // Set all user properties reliably
+      createdBy: userDisplayName,
+      createdByUid: currentUser.uid,
+      createdByEmail: currentUser.email || null,
+      createdByPhotoURL: userPhotoURL
+    };
+    
+    console.log("Activity data being published:", {
+      title: activity.title,
+      createdBy: activity.createdBy,
+      createdByUid: activity.createdByUid,
+      createdByEmail: activity.createdByEmail
+    });
+    
+    // Calculate start point
+    if (builderState.mode === 'spot' && builderState.location) {
+      activity.startPoint = builderState.location;
+    } else if (builderState.mode === 'path' && builderState.route && builderState.route.length > 0) {
+      activity.startPoint = builderState.route[0];
+    } else if (builderState.mode === 'checkpoints' && builderState.checkpoints && builderState.checkpoints.length > 0) {
+      activity.startPoint = builderState.checkpoints[0];
+    }
+    
+    // Build the path
+    const categoryRef = doc(db, 'categories', builderState.category);
+    const activityTypeRef = doc(collection(categoryRef, 'activities'), builderState.activityType);
+    const itemsCollectionRef = collection(activityTypeRef, 'items');
+    
+    console.log(`Publishing to path: categories/${builderState.category}/activities/${builderState.activityType}/items/[auto-id]`);
+    
+    // Add the document to the items collection
+    const docRef = await addDoc(itemsCollectionRef, activity);
+    
+    console.log(`Activity published with ID: ${docRef.id}`);
+    
+    router.replace('/screens/ActivityCreatedScreen');
+  } catch (err) {
+    console.error('Error publishing activity:', err);
+    Alert.alert('Error', err.message || 'Failed to publish activity');
+  } finally {
+    setPublishing(false);
+  }
+};
 
   // Determine if we should show the map at the top (no image) or bottom (has image)
   const hasImage = builderState && !!builderState.gallery?.[0];

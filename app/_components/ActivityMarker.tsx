@@ -1,7 +1,7 @@
 // _components/ActivityMarker.tsx
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Marker, Callout } from 'react-native-maps';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Marker } from 'react-native-maps';
 import getMarkerSvg from './markers';
 
 // Category colors mapping
@@ -14,50 +14,75 @@ const categoryColors = {
   'Urban': '#BDBDBD',
 };
 
-const ActivityMarker = ({ id, coordinate, title, description, category, activity, displayName, size = 36 }) => {
-  // Skip rendering if this is a category rather than an activity
-  const isCategory = !title && displayName && !activity;
-  if (isCategory) {
-    console.log(`Skipping marker for category: ${displayName}`);
-    return null;
-  }
-  
+type ActivityMarkerProps = {
+  id: string;
+  coordinate: {
+    latitude: number;
+    longitude: number;
+  };
+  title: string;
+  description: string;
+  category: string;
+  activity: string;
+  displayName?: string;
+  size?: number;
+  onPress?: (activityId: string) => void;
+};
+
+const ActivityMarker = ({ 
+  id, 
+  coordinate, 
+  title, 
+  description, 
+  category, 
+  activity, 
+  displayName, 
+  size = 36,
+  onPress 
+}: ActivityMarkerProps) => {
+  // Log all data passed to the marker
+  console.log('📍 Rendering ActivityMarker:', {
+    id, title, description, coordinate, category, activity, displayName
+  });
+
   // Skip rendering if coordinate is invalid
   if (!coordinate || typeof coordinate.latitude !== 'number' || typeof coordinate.longitude !== 'number') {
-    console.warn(`Invalid coordinate for activity ${id}, skipping marker`);
+    console.warn(`❌ Invalid coordinate for activity ${id}, skipping marker.`);
     return null;
   }
-  
-  // For debugging
-  console.log(`Rendering marker: ${category}/${activity}`);
-  
-  // Get the appropriate SVG component
-  const MarkerIcon = getMarkerSvg(category, activity);
+
+  // Defensive fallback for missing activity
+  const safeActivity = activity || 'unknown';
+  const MarkerIcon = getMarkerSvg(category, safeActivity);
   const markerColor = categoryColors[category] || '#81C784';
-  
+
+  // Display fallback letter
+  const fallbackLetter = safeActivity[0]?.toUpperCase() || title?.[0]?.toUpperCase() || '?';
+
+  // Handle marker press
+  const handlePress = () => {
+    if (onPress) {
+      onPress(id);
+    }
+  };
+
   return (
     <Marker
       key={id}
+      identifier={id}
       coordinate={coordinate}
-      title={title}
-      description={description}
+      tracksViewChanges={true}
+      onPress={handlePress}
     >
-      <View style={[styles.markerContainer, { backgroundColor: markerColor }]}>
+      <View style={[styles.markerContainer, { backgroundColor: markerColor }]}> 
         <View style={styles.iconWrapper}>
           {MarkerIcon ? (
             <MarkerIcon width={24} height={24} fill="#000000" />
           ) : (
-            <Text style={styles.fallbackText}>{activity && activity[0] ? activity[0].toUpperCase() : '?'}</Text>
+            <Text style={styles.fallbackText}>{fallbackLetter}</Text>
           )}
         </View>
       </View>
-      <Callout>
-        <View style={styles.calloutView}>
-          <Text style={styles.calloutTitle}>{title || 'Untitled'}</Text>
-          <Text style={styles.calloutDescription}>{description || 'No description'}</Text>
-          <Text style={styles.calloutCategory}>{displayName || category || 'Unknown'}</Text>
-        </View>
-      </Callout>
     </Marker>
   );
 };
@@ -89,26 +114,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
     fontSize: 14,
-  },
-  calloutView: {
-    padding: 10,
-    maxWidth: 200,
-    minWidth: 150,
-  },
-  calloutTitle: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  calloutDescription: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 5,
-  },
-  calloutCategory: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
+  }
 });
 
 export default ActivityMarker;

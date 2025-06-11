@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityBuilderContext } from '../_context/ActivityBuilderContext';
 import { Picker } from '@react-native-picker/picker';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import DifficultyBlocks from '../_components/DifficultyBlocks';
 
@@ -106,7 +106,7 @@ export default function ActivityBuilderStep2() {
           categoriesList.push({ id: 'Land', displayName: 'Land' });
           categoriesList.push({ id: 'Urban', displayName: 'Urban' });
           categoriesList.push({ id: 'Water', displayName: 'Water' });
-          categoriesList.push({ id: 'ATV', displayName: 'ATV' });
+          categoriesList.push({ id: 'ATV', displayName: 'All Terrain Vehicles' });
         }
         
         setCategories(categoriesList);
@@ -120,7 +120,7 @@ export default function ActivityBuilderStep2() {
           { id: 'Land', displayName: 'Land' },
           { id: 'Urban', displayName: 'Urban' },
           { id: 'Water', displayName: 'Water' },
-          { id: 'ATV', displayName: 'ATV' }
+          { id: 'ATV', displayName: 'All Terrain Vehicles' }
         ];
         setCategories(fallbackCategories);
       } finally {
@@ -132,65 +132,119 @@ export default function ActivityBuilderStep2() {
   }, []);
   
   // Fetch activities when a category is selected
-  useEffect(() => {
-    const fetchActivities = async () => {
-      if (!selectedCategory) {
-        setFilteredActivities([]);
-        return;
-      }
+useEffect(() => {
+  const fetchActivities = async () => {
+    if (!selectedCategory) {
+      setFilteredActivities([]);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      console.log(`Fetching activities for category: ${selectedCategory}`);
       
-      setLoading(true);
+      // Start with an empty Map to collect unique activities by normalized name
+      const activityMap = new Map();
+      
+      // First try to get actual activities from Firebase
       try {
-        const activitiesCollection = collection(db, 'activities');
+        // Get all activity types in this category
+        const activityTypesRef = collection(doc(db, 'categories', selectedCategory), 'activities');
+        const activityTypesSnap = await getDocs(activityTypesRef);
         
-        // First, try with categoryId field
-        let activitiesQuery = query(
-          activitiesCollection,
-          where('categoryId', '==', selectedCategory)
-        );
-        let activitiesSnapshot = await getDocs(activitiesQuery);
+        console.log(`Found ${activityTypesSnap.size} activity types in category ${selectedCategory}`);
         
-        // If no results, try with category field
-        if (activitiesSnapshot.empty) {
-          activitiesQuery = query(
-            activitiesCollection,
-            where('category', '==', selectedCategory)
-          );
-          activitiesSnapshot = await getDocs(activitiesQuery);
-        }
-        
-        const activitiesList: Activity[] = [];
-        
-        activitiesSnapshot.forEach((doc) => {
-          const data = doc.data();
+        // Process each activity type from Firebase
+        activityTypesSnap.forEach(docSnapshot => {
+          const activityTypeId = docSnapshot.id;
+          const data = docSnapshot.data();
           
-          activitiesList.push({
-            id: doc.id,
-            displayName: data.displayName || data.title || doc.id,
-            categoryId: data.categoryId || data.category || selectedCategory,
+          // Normalize the display name (not the ID) for comparison
+          const displayName = data.displayName || formatActivityName(activityTypeId);
+          const normalizedName = normalizeActivityName(displayName);
+          
+          // Add this activity type with priority over fallbacks
+          activityMap.set(normalizedName, {
+            id: activityTypeId,
+            displayName: displayName,
+            categoryId: selectedCategory
           });
         });
-        
-        // If Firebase has activities, use them
-        if (activitiesList.length > 0) {
-          setFilteredActivities(activitiesList);
-        } else {
-          // Otherwise use fallback activities
-          const fallbackActivities = getFallbackActivitiesForCategory(selectedCategory);
-          setFilteredActivities(fallbackActivities);
-        }
       } catch (error) {
-        console.error('Error fetching activities from Firebase:', error);
-        // On error, use fallback activities
-        const fallbackActivities = getFallbackActivitiesForCategory(selectedCategory);
-        setFilteredActivities(fallbackActivities);
-      } finally {
-        setLoading(false);
+        console.error(`Error fetching activity types for category ${selectedCategory}:`, error);
       }
-    };
-    
-    fetchActivities();
-  }, [selectedCategory]);
+      
+      // Get the fallback activities - only add if no Firebase version exists
+      const baseActivities = getFallbackActivitiesForCategory(selectedCategory);
+      
+      // Add fallback activities only if no Firebase match exists
+      baseActivities.forEach(activity => {
+        // Normalize the display name for comparison
+        const normalizedName = normalizeActivityName(activity.displayName);
+        
+        // Only add if not already in the map
+        if (!activityMap.has(normalizedName)) {
+          activityMap.set(normalizedName, {
+            ...activity
+          });
+        }
+      });
+      
+      // Convert map back to array and sort alphabetically by display name
+      const activitiesList = Array.from(activityMap.values())
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      
+      console.log(`Prepared ${activitiesList.length} activities for dropdown`);
+      
+      setFilteredActivities(activitiesList);
+    } catch (error) {
+      console.error('Error fetching activities from Firebase:', error);
+      // On error, use fallback activities
+      const fallbackActivities = getFallbackActivitiesForCategory(selectedCategory);
+      setFilteredActivities(fallbackActivities);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchActivities();
+}, [selectedCategory]);
+
+// For comparison/deduplication - creates normalized strings for Map keys
+const normalizeActivityName = (displayName) => {
+  if (!displayName) return '';
+  
+  // Convert to lowercase
+  let normalized = displayName.toLowerCase();
+  
+  // Replace hyphens with spaces
+  normalized = normalized.replace(/-/g, ' ');
+  
+  // Replace multiple spaces with a single space
+  normalized = normalized.replace(/\s+/g, ' ');
+  
+  // Remove all non-alphanumeric characters (except spaces)
+  normalized = normalized.replace(/[^a-z0-9\s]/g, '');
+  
+  // Trim any leading/trailing spaces
+  normalized = normalized.trim();
+  
+  // Finally, remove all spaces
+  normalized = normalized.replace(/\s/g, '');
+  
+  return normalized;
+};
+
+// For display purposes - converts IDs to readable names
+const formatActivityName = (activityTypeId) => {
+  if (!activityTypeId) return '';
+  
+  return activityTypeId
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
   
   // Handle image picking
   const handlePickImage = async () => {
@@ -260,7 +314,7 @@ export default function ActivityBuilderStep2() {
         return [
           { id: 'camping', displayName: 'Camping', categoryId: 'Land' },
           { id: 'canyoning', displayName: 'Canyoning', categoryId: 'Land' },
-          { id: 'cave_exploration', displayName: 'Cave Exploration', categoryId: 'Land' },
+          { id: 'caving', displayName: 'Caving', categoryId: 'Land' },
           { id: 'climbing', displayName: 'Climbing', categoryId: 'Land' },
           { id: 'hiking', displayName: 'Hiking', categoryId: 'Land' },
           { id: 'mountain_biking', displayName: 'Mountain Biking', categoryId: 'Land' },
@@ -268,7 +322,7 @@ export default function ActivityBuilderStep2() {
           { id: 'mounted_riding', displayName: 'Mounted Riding', categoryId: 'Land' },
           { id: 'scrambling', displayName: 'Scrambling', categoryId: 'Land' },
           { id: 'trekking', displayName: 'Trekking', categoryId: 'Land' },
-          { id: 'ziplining', displayName: 'Zip Lining', categoryId: 'Land' },
+          { id: 'zip_lining', displayName: 'Zip Lining', categoryId: 'Land' },
         ];
       case 'Water':
         return [
@@ -278,13 +332,13 @@ export default function ActivityBuilderStep2() {
           { id: 'paddleboard', displayName: 'Paddleboarding', categoryId: 'Water' },
           { id: 'rafting', displayName: 'Rafting', categoryId: 'Water' },
           { id: 'sailing', displayName: 'Sailing', categoryId: 'Water' },
-          { id: 'scuba', displayName: 'Scuba Diving', categoryId: 'Water' },
+          { id: 'scuba_diving', displayName: 'Scuba Diving', categoryId: 'Water' },
           { id: 'snorkeling', displayName: 'Snorkeling', categoryId: 'Water' },
         ];
       case 'Air':
         return [
           { id: 'hand_gliding', displayName: 'Hand Gliding', categoryId: 'Air' },
-          { id: 'hotair_balloon', displayName: 'Hot Air Balloon', categoryId: 'Air' },
+          { id: 'hot_air_balloon', displayName: 'Hot Air Balloon', categoryId: 'Air' },
           { id: 'parachuting', displayName: 'Parachuting', categoryId: 'Air' },
           { id: 'paragliding', displayName: 'Paragliding', categoryId: 'Air' },
           { id: 'skydiving', displayName: 'Skydiving', categoryId: 'Air' },
@@ -292,7 +346,7 @@ export default function ActivityBuilderStep2() {
         ];
       case 'Ice_Snow':
         return [
-          { id: 'ice_climing', displayName: 'Ice Climbing', categoryId: 'Ice_Snow' },
+          { id: 'ice_climbing', displayName: 'Ice Climbing', categoryId: 'Ice_Snow' },
           { id: 'nordic_skating', displayName: 'Nordic Skating', categoryId: 'Ice_Snow' },
           { id: 'nordic_skiing', displayName: 'Nordic Skiing', categoryId: 'Ice_Snow' },
           { id: 'snowboarding', displayName: 'Snowboarding', categoryId: 'Ice_Snow' },
@@ -301,17 +355,17 @@ export default function ActivityBuilderStep2() {
         ];
       case 'ATV':
         return [
-          { id: 'dirtbike', displayName: 'Dirt Biking', categoryId: 'ATV' },
-          { id: 'offroad', displayName: 'Off-Roading', categoryId: 'ATV' },
-          { id: 'quadbike', displayName: 'Quad Biking', categoryId: 'ATV' },
+          { id: 'dirt_biking', displayName: 'Dirt Biking', categoryId: 'ATV' },
+          { id: 'off_roading', displayName: 'Off-Roading', categoryId: 'ATV' },
+          { id: 'quad_biking', displayName: 'Quad Biking', categoryId: 'ATV' },
           { id: 'sxs', displayName: 'SxS', categoryId: 'ATV' },
         ];
       case 'Urban':
         return [
-          { id: 'electric_scooter', displayName: 'Electric Scooter Ride', categoryId: 'Urban' },
+          { id: 'electric_scooter_ride', displayName: 'Electric Scooter Ride', categoryId: 'Urban' },
           { id: 'geocaching', displayName: 'Geocaching', categoryId: 'Urban' },
           { id: 'parkour', displayName: 'Parkour', categoryId: 'Urban' },
-          { id: 'scooter', displayName: 'Scooter Ride', categoryId: 'Urban' },
+          { id: 'scooter_ride', displayName: 'Scooter Ride', categoryId: 'Urban' },
           { id: 'skating', displayName: 'Skating', categoryId: 'Urban' },
           { id: 'urban_cycling', displayName: 'Urban Cycling', categoryId: 'Urban' },
           { id: 'urban_hiking', displayName: 'Urban Hiking', categoryId: 'Urban' },
@@ -384,24 +438,24 @@ export default function ActivityBuilderStep2() {
           </View>
         ) : (
           <Picker
-            selectedValue={selectedActivityType}
-            onValueChange={(itemValue) => {
-              console.log('Selected activity:', itemValue);
-              setSelectedActivityType(itemValue);
-            }}
-            style={styles.picker}
-            enabled={!!selectedCategory}
-            mode="dropdown"
-          >
-            <Picker.Item label={selectedCategory ? "Select an activity" : "First select a category"} value="" />
-            {filteredActivities.map((activity) => (
-              <Picker.Item
-                key={activity.id}
-                label={activity.displayName}
-                value={activity.id}
-              />
-            ))}
-          </Picker>
+  selectedValue={selectedActivityType}
+  onValueChange={(itemValue) => {
+    console.log('Selected activity:', itemValue);
+    setSelectedActivityType(itemValue);
+  }}
+  style={styles.picker}
+  enabled={!!selectedCategory}
+  mode="dropdown"
+>
+  <Picker.Item label={selectedCategory ? "Select an activity" : "First select a category"} value="" />
+  {filteredActivities.map((activity) => (
+    <Picker.Item
+      key={activity.id}
+      label={activity.displayName}
+      value={activity.id}
+    />
+  ))}
+</Picker>
         )}
       </View>
       
